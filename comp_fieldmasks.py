@@ -81,25 +81,19 @@ bbl2 = args.bbl2
 kappa_blanksky = args.kappa_blanksky
 
 
-#def comp_fieldmasks( path, in_datacube, ihdu_d, ihdu_v, in_expcube, ihdu_e, parameters, out_rootname ):
-#
-#    print("Compute various mask images for cube %s" % in_datacube )
-#    print("(please ignore 'empty slice' and 'invalid value' runtime warnings)." )
-
 # Open cube HDUs
 cubeHDU = fits.open(in_datacube)
-npix = ( cubeHDU[ihdu_d].header['naxis1'],  cubeHDU[ihdu_d].header['naxis2'],  cubeHDU[ihdu_d].header['naxis3'] )
+dhead = cubeHDU[ihdu_d].header
+npix = ( dhead['naxis1'], dhead['naxis2'], dhead['naxis3'] )
 ecubeHDU = fits.open(in_expcube)
+e_cube = ecubeHDU[ihdu_e].data
 
 # Create mean exposure image as average through all layers
-e_cube = ecubeHDU[ihdu_e].data
 exp_ima = np.nanmean(e_cube, axis=0)
 del e_cube
 ecubeHDU.close()
-#fits.writeto('expima.fits', exp_ima, header=ecubeHDU.header, overwrite=True)
-#fits.writeto(path + '/' + out_rootname + '_expima.fits', exp_ima, header=ecubeHDU.header, overwrite=True)
-#    print(" ... writing output mean exposure image %s" % out_rootname + '_expima.fits' )
 
+print("Opening cubes. Creating Field-of-View mask image")
 # Create Field-of-View mask image, defined as all pixels in mean exposure 
 # image above some minimum number of contributing exposures
 # (1 = inside FoV, 0 = outside FoV)
@@ -107,11 +101,9 @@ medianexp = np.nanmedian(exp_ima[exp_ima > 0.])
 threshold = medianexp * medexpfrac
 fmask_fov = (exp_ima > threshold).astype(np.int16)
 
-#    fits.writeto('fovmask.fits', fmask_fov, header=dcubeHDU.header, overwrite=True)
-#    fits.writeto(path + '/' + out_rootname + '_fovmask.fits', fmask_fov, header=dcubeHDU.header, overwrite=True)
-#    print(" ... writing output FoV mask %s for expima threshold = %6.3f" % (out_rootname + '_fovmask.fits', threshold) )
-
-    # Compute a broad-band image of the cube (rather than full white-light), with zero-order background correction
+print("Creating a broad-band image of the cube (not full white-light)")
+# Compute a broad-band image of the cube (rather than full white-light), 
+# with zero-order background correction
 d_cube = cubeHDU[ihdu_d].data
 newdata = np.zeros(d_cube.shape,dtype=np.float32)
 bb_ima = np.nanmean(d_cube[bbl1:bbl2+1,:,:], axis=0)
@@ -119,44 +111,40 @@ del d_cube
 bb_ima[fmask_fov < 1] = np.NaN
 bgrcor = np.nanmedian(bb_ima)
 bb_ima = bb_ima - bgrcor
-    #fits.writeto('bbima.fits', bb_ima, header=dcubeHDU.header, overwrite=True)
-    #fits.writeto(path + '/' + out_rootname + '_bbima.fits', bb_ima, header=dcubeHDU.header, overwrite=True)
-    #print(" ... writing broadband image %s for layer range %d - %d" % (out_rootname + '_bbima.fits', bbl1, bbl2) )
 
-    # Mask all pixels in broadband image above threshold = kappa * bgrnoise, where bgrnoise is estimated from variance cube
+print("Masking all pixels above (kappa * bgrnoise)")
+# Mask all pixels in broadband image above threshold = kappa * bgrnoise, 
+# where bgrnoise is estimated from variance cube
 v_cube = cubeHDU[ihdu_v].data
-vmed_vec = np.nanmedian(v_cube[bbl1:bbl2+1,:,:], axis=(1,2))    
 # 1D array with median variances per layer
+vmed_vec = np.nanmedian(v_cube[bbl1:bbl2+1,:,:], axis=(1,2))    
 del v_cube
-corrfac = 1.7  
 # approximate factor correcting for covariance losses due to resampling 
-sigbb = m.sqrt(np.mean(vmed_vec)/npix[2]) * corrfac      
+corrfac = 1.7  
 # bgrnoise in bb image = sqrt of mean variance 
+sigbb = m.sqrt(np.mean(vmed_vec)/npix[2]) * corrfac      
 threshold = kappa_blanksky * sigbb
 tmpmask = (np.logical_and(bb_ima<threshold,fmask_fov>0)).astype(np.float)
 
-#    fits.writeto('bbmask1.fits', tmpmask, header=dcubeHDU.header, overwrite=True)
-
-    # Create mask of "blank sky" pixels (1 = blank sky within FoV, 0 = everything else)
-    # by modifying pixels of initial mask in sequence of mask shrinking and growing operations
-np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9>7.5, 1.)     
+print("Creating the final blank-sky mask with erosion and dilation operations.")
+# Create mask of "blank sky" pixels (1 = blank sky within FoV, 
+# 0 = everything else)
+# by modifying pixels of initial mask in sequence of mask shrinking and 
+# growing operations
 # shrink mask to eliminate solitary pixels
-#    fits.writeto('bbmask2.fits', tmpmask, header=dcubeHDU.header, overwrite=True)
-np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<8.5, 0.)     
+np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9>7.5, 1.)     
 # grow mask unconditionally
-#    fits.writeto('bbmask3.fits', tmpmask, header=dcubeHDU.header, overwrite=True)
+np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<8.5, 0.)     
+# grow mask multiple times with round edges
 for i in range(0,5):
     np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<6.5, 0.)    
-# grow mask multiple times with round edges
 fmask_blanksky = tmpmask.astype(np.int16) 
+
+print("Writing...")
 fits.writeto(outputname, data=fmask_blanksky, header=cubeHDU[ihdu_d].header, overwrite=True)
-#    fits.writeto(path + '/' + out_rootname + '_blankskymask.fits', fmask_blanksky, header=dcubeHDU.header, overwrite=True)
-#    print(" ... writing 'blank sky' mask %s " % (out_rootname + '_blankskymask.fits') )
 del fmask_blanksky
     
 print("Done.")
-print()
-#return
 
 
 
