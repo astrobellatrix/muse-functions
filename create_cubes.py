@@ -1,3 +1,11 @@
+#! /usr/bin/env python
+#
+# FILE:    create_cubes.py
+# AUTHORS: Lutz Wisotzki, Tanya Urrutia
+# DESCR.:  Create DC-subtracted, effnoised DATA- and MFS-cubes
+#
+
+import argparse
 import math as m
 import numpy as np
 from astropy.io import fits
@@ -5,6 +13,35 @@ import numpy.ma as ma
 from scipy.ndimage import filters
 from scipy.ndimage import morphology
 
+parser = argparse.ArgumentParser(description="""
+Create DC-subtracted, effnoised DATA- and MFS-cubes. 
+""",
+formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument("-i","--input",
+                    required=True,
+                    type=str,
+                    help="Name of the input FITS datacube for which the various calculations will be done. The datacube must have a flux and variance extension and optionally also an exposure cube extension.")
+parser.add_argument("-f","--medfilt",
+                    required=True,
+                    type=str,
+                    help="Name of the median filtered datacube. This is most likely computed with LSDCat's median-filter-cube.py routine.")
+parser.add_argument("-bg","--bgrstat",
+                    required=True,
+                    type=str,
+                    help="Name of the background statistic FITS file created with comp_brgstat.py")
+parser.add_argument("-S","--SHDU",
+                    type=int,
+                    default=1,
+                    help="HDU number (0-indexed) or name in the input FITS file containing the flux data.")
+parser.add_argument("-N","--NHDU",
+                    type=int,
+                    default=2,
+                    help="HDU number (0-indexed) or name in the input FITS file containing the variance data.")
+parser.add_argument("-MF","--MFHDU",
+                    type=int,
+                    default=2,
+                    help="HDU number (0-indexed) or name in the median-filtered FITS file containing the median-filtered data.")
 
 def create_mfs_and_effvar_cube(path, in_datacube, ihdu_d, in_mfcube, ihdu_m, in_bgrstattab, in_expcube, ihdu_e, outcube ):
 
@@ -14,16 +51,24 @@ def create_mfs_and_effvar_cube(path, in_datacube, ihdu_d, in_mfcube, ihdu_m, in_
     print(" -- compute effective variance from effective noise and exposure cube," )
     print(" -- set data to zero outside of field of view." )
 
-    # Read original datacube
-    dcubeHDU = fits.open(path + '/' + in_datacube)[ihdu_d]
-    npix = ( dcubeHDU.header['naxis1'],  dcubeHDU.header['naxis2'],  dcubeHDU.header['naxis3'] )
-    d_cube = dcubeHDU.data
+in_datacube = args.input
+mf_datacube = args.medfilt
+ihdu_d = args.SHDU
+ihdu_v = args.NHDU
+mfhdu_mf = args.MFHDU
 
-    # Read spectrally median filtered cube
-    mcubeHDU = fits.open(path + '/' + in_mfcube)[ihdu_m]
-    mfs_cube = d_cube - mcubeHDU.data
-    del d_cube
-    del mcubeHDU.data
+# Read original datacube
+cubeHDU = fits.open(in_datacube)
+dhead = cubeHDU[ihdu_d].header
+d_cube = cubeHDU[ihdu_d].data
+npix = ( dhead['naxis1'], dhead['naxis2'], dhead['naxis3'] )
+del d_cube
+
+# Read median filtered cube
+mfcubeHDU = fits.open(mf_datacube)
+mf_cube = mfcubeHDU[mfhdu_mf].data
+mfs_cube = d_cube - mcubeHDU.data
+del mcubeHDU.data
 
     # Read exposure cube
     ecubeHDU = fits.open(path + '/' + in_expcube)[ihdu_e]
@@ -62,22 +107,8 @@ def create_mfs_and_effvar_cube(path, in_datacube, ihdu_d, in_mfcube, ihdu_m, in_
     print(" ... writing output cube %s" % outcube )
 
     print("Done.")
-    print()
-    return
+    
 
-
-##########################
-if __name__ == "__main__":
-    import sys
-
-    # create_mfs_and_effvar_cube( path, in_datacube, ihdu_d, in_mfcube, ihdu_m, in_bgrstattab, in_expcube, ihdu_e outcube )
-#    create_mfs_and_effvar_cube( 'candels-cdfs-47', 'DATACUBE_candels-cdfs-47_v1.0.fits', 1, 'median_filtered_DATACUBE_candels-cdfs-47_v1.0.fits', 2, 'cdfs-47_bgrstat.fits', 'DATACUBE_candels-cdfs-47_v1.0.fits', 3, 'cdfs-47_mfs-and-effvar-cube.fits' )
-#    create_mfs_and_effvar_cube( '../candels-cosmos-17', 'DATACUBE_candels-cosmos-17_v1.0.fits', 1, 'median_filtered_DATACUBE_candels-cosmos-17_v1.0.fits', 2, 'cosmos-17_bgrstat.fits', 'DATACUBE_candels-cosmos-17_v1.0.fits', 3, 'cosmos-17_mfs-and-effvar-cube.fits' )
-#    create_mfs_and_effvar_cube( '../udf-01', 'DATACUBE_udf-01_v1.0.fits', 1, 'median_filtered_DATACUBE_udf-01_v1.0.fits', 2, 'udf-01_bgrstat.fits', 'DATACUBE_udf-01_v1.0.fits', 3, 'udf-01_mfs-and-effvar-cube.fits' )
-
-create_mfs_and_effvar_cube( '.', 'DATACUBE_QUBES_1422.fits', 1, 'median_filtered_DATACUBE_QUBES_1422.fits', 2, 'QUBES_1422_bgrstat.fits', 'DATACUBE_QUBES_1422_exp.fits', 0, 'QUBES_1422_mfs-and-effvar-cube.fits' )
-
-#    create_mfs_and_effvar_cube ( sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], int(sys.argv[5]), sys.argv[6], sys.argv[7], int(sys.argv[8]), sys.argv[9] )
 
 
 
