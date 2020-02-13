@@ -5,6 +5,7 @@
 # DESCR.:  Compute background statistics for the cube
 #
 
+import argparse
 import math as m
 import numpy as np
 from astropy.io import fits
@@ -22,14 +23,6 @@ parser.add_argument("-i","--input",
                     required=True,
                     type=str,
                     help="Name of the input FITS datacube for which the various calculations will be done. The datacube must have a flux and variance extension and optionally also an exposure cube extension.")
-parser.add_argument("-S","--SHDU",
-                    type=int,
-                    default=1,
-                    help="HDU number (0-indexed) or name in the input FITS file containing the flux data.")
-parser.add_argument("-N","--NHDU",
-                    type=int,
-                    default=2,
-                    help="HDU number (0-indexed) or name in the input FITS file containing the variance data.")
 parser.add_argument("-m","--skymask",
                     required=True,
                     type=str,
@@ -39,33 +32,45 @@ parser.add_argument("-f","--medfilt",
                     type=str,
                     help="Name of the median filtered datacube. This is most likely computed with LSDCat's median-filter-cube.py routine.")
 parser.add_argument("-o","--output",
-                    type=str
-                    default="bgrstat.fits"
+                    type=str,
+                    default="bgrstat.fits",
                     help="Name of the output background stat FITS table.")
+parser.add_argument("-S","--SHDU",
+                    type=int,
+                    default=1,
+                    help="HDU number (0-indexed) or name in the input FITS file containing the flux data.")
+parser.add_argument("-N","--NHDU",
+                    type=int,
+                    default=2,
+                    help="HDU number (0-indexed) or name in the input FITS file containing the variance data.")
+parser.add_argument("-MF","--MFHDU",
+                    type=int,
+                    default=2,
+                    help="HDU number (0-indexed) or name in the median-filtered FITS file containing the median-filtered data.")
 parser.add_argument("--statmethod",
                     type=str,
-                    default="fits"
-                    help="Way of calculating the wavelength dependent resampling corrections deduced from a random cube. The options are: 'fits' in which the rancubestat.fits file available on the repository must be present in the directory
-and 'poly' in which a 2nd order polynomial was fitted through the rancubestat and can extend to lower wavelengths, e.g. for AO data.")
+                    default="fits",
+                    help="Way of calculating the wavelength dependent resampling corrections deduced from a random cube. The options are: 'fits' in which the rancubestat.fits file available on the repository must be present in the directory and 'poly' in which a 2nd order polynomial was fitted through the rancubestat and can extend to lower wavelengths, e.g. for AO data.")
 parser.add_argument("--poly0",
-                    type=float
-                    default=5.57934039e-01
+                    type=float,
+                    default=5.57934039e-01,
                     help="0th order of polynomial if statmethod='poly'.")
 parser.add_argument("--poly1",
-                    type=float
-                    default=-2.11008327e-06
+                    type=float,
+                    default=-2.11008327e-06,
                     help="1st order of polynomial if statmethod='poly'.")
 parser.add_argument("--poly2",
-                    type=float
-                    default=2.24603677e-10
+                    type=float,
+                    default=2.24603677e-10,
                     help="2nd order of polynomial if statmethod='poly'.")
 
 args = parser.parse_args()
 in_datacube = args.input
 ihdu_d = args.SHDU
 ihdu_v = args.NHDU
+mfhdu_mf = args.MFHDU
 outputname = args.output
-mfscube = args.medfilt
+mfcube = args.medfilt
 inmask = args.skymask
 statmethod = args.statmethod
 poly0 = args.poly0
@@ -76,7 +81,7 @@ if (statmethod == 'fits'):
     in_rancubestattab = 'rancubestat.fits'
 if (statmethod == 'poly'):
     # gathered from fitting rancubestat.fits above
-    fitpoly = np.poly1d([ poly2, poly1, poly0])
+    fitpoly = np.poly1d([ poly2, poly1, poly0 ])
 
 print("Compute background statistics for cube %s" % in_datacube )
 
@@ -89,8 +94,8 @@ start = ( dhead['crval1'], dhead['crval2'], dhead['crval3'] )
 step = ( dhead['cd1_1'], dhead['cd2_2'], dhead['cd3_3'] )
 v_cube = cubeHDU[ihdu_v].data
 
-mfcubeHDU = fits.open(mfscube)
-mf_cube = mfcubeHDU[uhdu_m].data
+mfcubeHDU = fits.open(mfcube)
+mf_cube = mfcubeHDU[mfhdu_mf].data
 mfs_cube = d_cube - mf_cube
 del mf_cube
 
@@ -159,7 +164,8 @@ dc_cor = meandata_gmf
 # step 3: If the difference between layer mean and the smoothed version 
 # deviates significantly from random then use the mean of that layer for 
 # the DC correction
-# expected standard error of the mean = sdev within each layer / sqrt(number of pixels)
+# expected standard error of the mean = sdev within each 
+# layer / sqrt(number of pixels)
 sigmean = qdsigdata/m.sqrt(np_unmasked)
 # ad-hoc value for kappa-sigma clipping
 kappa = 4. 
@@ -183,26 +189,35 @@ if (statmethod == 'fits'):
     ranstatwave = ranstat_tab['wave']
     ranstatcorrfac = ranstat_tab['srsig']
     # step 2: Define an interpolator for correction factors in wavelength
-    corrfac_interpolate = interpolate.interp1d(ranstatwave, ranstatcorrfac, fill_value='extrapolate')  # this provides a function
-    # step 3: Calculate default "effective noise" as layer-by-layer standard deviation, corrected for resampling
+    # this provides a function
+    corrfac_interpolate = interpolate.interp1d(ranstatwave, ranstatcorrfac, fill_value='extrapolate')  
+    # step 3: Calculate default "effective noise" as layer-by-layer standard 
+    # deviation, corrected for resampling
     effsigmfs = qdsigmfs/corrfac_interpolate(wave)
-    # step 4: Calculate ratios of layer-by-layer standard deviations and formally propagated errors
+    # step 4: Calculate ratios of layer-by-layer standard deviations and 
+    # formally propagated errors
     ratio_qdsig_pvar = qdsigmfs/np.sqrt(medpvar)
     # step 5: Rescale formally propagated errors by the mean of this ratio
     medpvar_rescaled = np.nanmean(ratio_qdsig_pvar) * np.sqrt(medpvar)/corrfac_interpolate(wave)
-    # step 6: If the layer-by-layer standard deviation is below the formally propagated error then the effective noise gets replaced by the rescaled propagated error value
+    # step 6: If the layer-by-layer standard deviation is below the 
+    # formally propagated error then the effective noise gets replaced by 
+    # the rescaled propagated error value
+    np.copyto(effsigmfs, medpvar_rescaled, where=(ratio_qdsig_pvar < 1.))
+if (statmethod == 'poly'):
+    # Step 1 - 3 can quickly get the correction factor from the polynomial.
+    # No need for interpolation
+    # Steps 4 - 6 are are the same as above
+    corrfac_poly = fitpoly(wave-7000)
+    effsigmfs = qdsigmfs/corrfac_poly
+    ratio_qdsig_pvar = qdsigmfs/np.sqrt(medpvar)
+    medpvar_rescaled = np.nanmean(ratio_qdsig_pvar) * np.sqrt(medpvar)/corrfac_poly
     np.copyto(effsigmfs, medpvar_rescaled, where=(ratio_qdsig_pvar < 1.))
 
 
-corrfac = fitpoly(wave-7000)
+# Write output table
+outtab = Table( [ wave, meandata, sdevdata, qdsigdata, meanmfs, sdevmfs, qdsigmfs, medpvar, dc_cor, mdc_cor, ratio_qdsig_pvar, effsigmfs ],
+    names=('wave', 'meandata', 'sdevdata', 'qdsigdata', 'meanmfs', 'sdevmfs', 'qdsigmfs', 'medpvar', 'dc_cor', 'mdc_cor', 'r', 'effsig') )
+outtab.write(outputname, overwrite=True)
 
+print("Done.")
 
-
-    # Write output table
-    outtab = Table( [ wave, meandata, sdevdata, qdsigdata, meanmfs, sdevmfs, qdsigmfs, medpvar, dc_cor, mdc_cor, ratio_qdsig_pvar, effsigmfs ],
-                    names=('wave', 'meandata', 'sdevdata', 'qdsigdata', 'meanmfs', 'sdevmfs', 'qdsigmfs', 'medpvar', 'dc_cor', 'mdc_cor', 'r', 'effsig') )
-    outtab.write(path + '/' + outtabfile, overwrite=True)
-
-    print("Done.")
-    print()
-    return

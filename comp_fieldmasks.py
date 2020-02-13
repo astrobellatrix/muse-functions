@@ -16,8 +16,7 @@ import warnings
 warnings.filterwarnings("ignore",category=RuntimeWarning)
 
 parser = argparse.ArgumentParser(description="""
-Compute mask images for the datacube. 
-Blurb about erosion and dilation.""",
+Compute mask images for the datacube using erosion and dilation.""",
 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument("-i","--input",
