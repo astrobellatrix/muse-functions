@@ -2,7 +2,7 @@
 #
 # FILE:    comp_fieldmasks.py
 # AUTHORS: Lutz Wisotzki, Tanya Urrutia
-# DESCR.:  Compute various mask images for the datacube
+# DESCR.:  Compute a sky mask image for the datacube
 #
 
 import argparse
@@ -16,7 +16,7 @@ import warnings
 warnings.filterwarnings("ignore",category=RuntimeWarning)
 
 parser = argparse.ArgumentParser(description="""
-Compute mask images for the datacube using erosion and dilation.""",
+Compute a sky mask image for the datacube using erosion and dilation.""",
 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument("-i","--input",
