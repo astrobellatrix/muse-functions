@@ -19,7 +19,7 @@ As detailed in 3.2.4 of the MUSE-Wide data release paper (Urrutia et al. 2019), 
 
 * comp_fieldmasks.py - Creates a skymask
 
-Creates a sky mask image for the datacube. It filters bright sources (with kappa-sigma thresholding) using erosion and dilation methods. It thereby ignores single bright pixels and ensures a proper object mask. This function is also used in other cases, e.g. to create a sky mask for superflat cubes. The sky mask created by this function is further used by comp_bgrstat.py
+Creates a sky mask image for the datacube. It filters bright sources (with kappa-sigma thresholding) using erosion and dilation methods. It thereby ignores single bright pixels and ensures a proper object mask. This function is also used in other cases, e.g. to create a sky mask for superflat cubes. The sky mask created by this function is further used by comp_bgrstat.py. Note that this function required an exposure map, in MUSE-Wide data this is usually found in extension 3, which is the default.
 
 * comp_bgrstat.py
 
@@ -32,7 +32,7 @@ Create DC-subtracted, effnoised DATA- and MFS-cubes.
 -- compute effective variance from effective noise and exposure cube,
 -- apply these to the datacubes and median-filtered datacubes
 
-Example run using MUSE-Wide DR2 data:
+* Example run using MUSE-Wide DR2 data:
 
 comp_fieldmasks.py -i DATACUBE_candels-cdfs-11_v2.0.fits -o candels-cdfs-11_v2.0_blankskymask.fits
 
