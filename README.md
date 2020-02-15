@@ -44,6 +44,8 @@ create_cubes.py -i DATACUBE_candels-cdfs-11_v2.0.fits -f median_filtered_DATACUB
 
 As described in the MUSE-Wide data release paper, for the first version of data reduction a previous step of sky subtraction was done before using ZAP. This worked on the basis that the LSF in a slice was self similar and also adjusted IFU sky background based on the strength of these sky lines. The routine is obsolete as its main goal of creating a zero-level sky background are now implemented in the autocal option in the pipeline. Hence, now the pipeline sky subtraction is the preferred option. The routines work on the individual IFU PIXTABLE basis. A FOV image in PIXTABLE (not sky) coordinates is required.
 
+Note that these routines were written in 2014/5 and used Python 2.7 and a pyfits instead of astropy.
+
 * fit_levels.py
 
 Masks out the brightest pixels and creates 48 sky spectra with a 0.2A sampling (one per slice) using mean with a 5 sigma clip. Calculates the relative sky levels based on a gauss fit to three bright, isolated sky lines.
