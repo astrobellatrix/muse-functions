@@ -11,7 +11,7 @@ Python 3.5+
 
 ## Install ##
 
-Simply clone and run the python functions. You might want to add the muse-analysis folder to your $PATH and $PYTHONPATH
+Simply clone and run the python functions. You might want to add the muse-functions folder to your $PATH and $PYTHONPATH
 
 ## Commands specific to running effective noise calculation ##
 
@@ -40,3 +40,14 @@ comp_bgrstat.py -i DATACUBE_candels-cdfs-11_v2.0.fits -m candels-cdfs-11_v2.0_bl
 
 create_cubes.py -i DATACUBE_candels-cdfs-11_v2.0.fits -f median_filtered_DATACUBE_candels-cdfs-11_v2.0.fits -bg candels-cdfs-11_v2.0_bgrstat.fits -od DATACUBE_candels-cdfs-11_v2.0_dcsub_effnoised.fits -om DATACUBE_MFS_candels-cdfs-11_v2.0_dcsub_effnoised.fits
 
+## Commands specific to running slice sky subtraction calculation ##
+
+As described in the MUSE-Wide data release paper, for the first version of data reduction a previous step of sky subtraction was done before using ZAP. This worked on the basis that the LSF in a slice was self similar and also adjusted IFU sky background based on the strength of these sky lines. The routine is obsolete as its main goal of creating a zero-level sky background are now implemented in the autocal option in the pipeline. Hence, now the pipeline sky subtraction is the preferred option. The routines work on the individual IFU PIXTABLE basis. A FOV image in PIXTABLE (not sky) coordinates is required.
+
+* fit_levels.py
+
+Masks out the brightest pixels and creates 48 sky spectra with a 0.2A sampling (one per slice) using mean with a 5 sigma clip. Calculates the relative sky levels based on a gauss fit to three bright, isolated sky lines.
+
+* subtract_av_slice.py
+
+Subtracts the sky on the PIXTABLES on a slice per slice basis scaling by the relative flux deduced in the previous step by the fit to the sky lines.
