@@ -11,6 +11,7 @@ import numpy as np
 from astropy.io import fits
 import numpy.ma as ma
 from scipy.ndimage import filters
+import matplotlib.pyplot as plt
 
 import warnings
 warnings.filterwarnings("ignore",category=RuntimeWarning)
@@ -38,10 +39,10 @@ parser.add_argument("-N","--NHDU",
 parser.add_argument("-E","--EHDU",
                     type=int,
                     default=3,
-                    help="HDU number (0-indexed) or name in the exposuer or input FITS file containing the exposure cube.")
+                    help="HDU number (0-indexed) or name in the exposure or input FITS file containing the exposure cube.")
 parser.add_argument("--expcube",
                     type=str,
-                    default='default',
+                    default='None',
                     help="Name of the exposure FITS datacube. The default is that it is contained in the input datacube as extension 3.")
 parser.add_argument("--medexpfrac",
                     type=float,
@@ -64,7 +65,7 @@ args = parser.parse_args()
 in_datacube = args.input
 exp_in_input = args.expcube
 
-if (exp_in_input == 'default'):
+if (exp_in_input == 'None'):
   in_expcube = in_datacube
 else:
   in_expcube = exp_in_input
@@ -78,7 +79,6 @@ medexpfrac = args.medexpfrac
 bbl1 = args.bbl1
 bbl2 = args.bbl2
 kappa_blanksky = args.kappa_blanksky
-
 
 # Open cube HDUs
 cubeHDU = fits.open(in_datacube)
@@ -116,14 +116,14 @@ print("Masking all pixels above (kappa * bgrnoise)")
 # where bgrnoise is estimated from variance cube
 v_cube = cubeHDU[ihdu_v].data
 # 1D array with median variances per layer
-vmed_vec = np.nanmedian(v_cube[bbl1:bbl2+1,:,:], axis=(1,2))    
+vmed_vec = np.nanmedian(v_cube[bbl1:bbl2+1,:,:], axis=(1,2))  
 del v_cube
 # approximate factor correcting for covariance losses due to resampling 
 corrfac = 1.7  
 # bgrnoise in bb image = sqrt of mean variance 
-sigbb = m.sqrt(np.mean(vmed_vec)/npix[2]) * corrfac      
+sigbb = m.sqrt(np.nanmean(vmed_vec)/npix[2]) * corrfac      
 threshold = kappa_blanksky * sigbb
-tmpmask = (np.logical_and(bb_ima<threshold,fmask_fov>0)).astype(np.float)
+tmpmask = (np.logical_and(bb_ima<threshold,fmask_fov>0)).astype(float)
 
 print("Creating the final blank-sky mask with erosion and dilation operations.")
 # Create mask of "blank sky" pixels (1 = blank sky within FoV, 
@@ -138,9 +138,11 @@ np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<8.5, 0.)
 for i in range(0,5):
     np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<6.5, 0.)    
 fmask_blanksky = tmpmask.astype(np.int16) 
+fmask_blanksky_zap = np.where((fmask_blanksky==0)|(fmask_blanksky==1), fmask_blanksky^1, fmask_blanksky)
 
 print("Writing...")
 fits.writeto(outputname, data=fmask_blanksky, header=cubeHDU[ihdu_d].header, overwrite=True)
+fits.writeto(outputname[:-5] + '.zap.fits', data=fmask_blanksky_zap, header=cubeHDU[ihdu_d].header, overwrite=True)
 del fmask_blanksky
     
 print("Done.")
