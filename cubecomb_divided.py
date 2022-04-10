@@ -179,7 +179,7 @@ for se in segments:
     # stat combine
     sumstat = np.nansum(statcliplist,axis=0)
     stat_comb = np.divide(sumstat,stat_weigh)
-    #stat_comb[stat_comb==np.inf] = np.nan
+    stat_comb[stat_comb==np.inf] = np.nan
     
     # for no sigma clipping uncomment below and comment above paragraph
     #print('combining cubes')
