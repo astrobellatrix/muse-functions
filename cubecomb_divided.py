@@ -1,20 +1,88 @@
 #! /usr/bin/env python
+#
+# FILE: cubecomb_divided.py
+# AUTHORS: Tanya Urrutia, Lutz Wisotzki
+# DESCR: Combine cubes previously drizzled onto the same grid, before average
+#        ombining there are two kappa-sigma clipping cycles
+#
 
-import sys
+import argparse
+import sys,time
 import numpy as np
 import astropy.io.fits as fits
 import astropy.stats as stats
 import glob as g
 from astropy.table import Table
 
-def main():
-  #segments = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z']
-  segments = ['a','b','c','d','e','f']
-  for se in segments:
+import warnings
+warnings.filterwarnings("ignore",category=RuntimeWarning)
+
+parser = argparse.ArgumentParser(description="""
+Combine cubes previously drizzled onto the same grid. The cubes are divided into 6, 26 or 60 segments along the wavelength axis. Before average combining each voxel there is are two kappa-sigma clipping routines, the kappa values being based once on the individual variances and once on the median variances - the number of clipped voxel information is written out to a table.""",
+formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument("-i","--input",
+                    required=True,
+                    type=str,
+                    help="""
+                    Base name of segmented cubes that are to be combined. Example: 'data_sfc_M0416-SF2_01_a.fits', then the base name is 'sfc_M0416-SF2'. Corresponding stat and wht cubes are expected. The combined segmented data cube would then be 'data_sfc_M0416-SF2_comb_a.fits'.
+                    """)
+parser.add_argument("--kappa1",
+                    type=float,
+                    default=5.0,
+                    help="""
+                    First kappa threshold for kappa-sigma clipping based on individual variances.
+                    """)
+parser.add_argument("--kappa2",
+                    type=float,
+                    default=2.0,
+                    help="""
+                    Second kappa threshold for kappa-sigma clipping based on the median of all variances.
+                    """)
+parser.add_argument("--seg_no",
+                    type=int,
+                    default=6,
+                    help="""
+                    Number of segments to be combined, same number that were divided. Possible values are 6, 26 and 60.
+                    """)
+
+args = parser.parse_args()
+
+name = args.input
+kappa1 = args.kappa1
+kappa2 = args.kappa2
+
+if (args.seg_no == 6):
+    segments = ['a','b','c','d','e','f']
+elif (args.seg_no == 26):
+    segments = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z']
+elif (args.seg_no == 60):
+    segments = ['aa','ab','ac','ad','ae','af','ag','ah','ai','aj','ak','al','am','an','ao','ap','aq','ar','as','at','au','av','aw','ax','ay','az','ba','bb','bc','bd','be','bf','bg','bh','bi','bj','bk','bl','bm','bn','bo','bp','bq','br','bs','bt','bu','bv','bw','bx','by','bz','ca','cb','cc','cd','ce','cf','cg','ch']
+else:
+   print('Have not programmed for this number of segments,')
+   print('possible values are 6, 26 or 60.')
+   sys.exit(1)
+
+# I still leave this in case the program crashes and I want to resume, this must be done manually...
+#segments = ['a','b','c','d','e','f']
+#segments = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z']  
+#segments = ['aa','ab','ac','ad','ae','af','ag','ah','ai','aj','ak','al','am','an','ao','ap','aq','ar','as','at','au','av','aw','ax','ay','az','ba','bb','bc','bd','be','bf','bg','bh','bi','bj','bk','bl','bm','bn','bo','bp','bq','br','bs','bt','bu','bv','bw','bx','by','bz','ca','cb','cc','cd','ce','cf','cg','ch']
+
+starttime = time.time()
+
+################
+
+print('Combining %d cubes for %s' % (seg_no,name))
+print('...')
+
+  
+for se in segments:
     print('Going with %s' % se)
-    datafiles = sorted(g.glob('./data_sfc_M0416-SF2_??_%s.fits' % se))
-    statfiles = sorted(g.glob('./stat_sfc_M0416-SF2_??_%s.fits' % se))
-    whtfiles = sorted(g.glob('./wht_sfc_M0416-SF2_??_%s.fits' % se))
+    passtime='('+str(round(time.time()-starttime,3))+'s)' 
+    print('... '+passtime)
+    datafiles = sorted(g.glob('./data_%s_??_%s.fits' % (name,se)))
+    statfiles = sorted(g.glob('./stat_%s_??_%s.fits' % (name,se)))
+    whtfiles = sorted(g.glob('./wht_%s_??_%s.fits' % (name,se)))
     datalist = []
     statlist = []
     whtlist = []
@@ -55,8 +123,8 @@ def main():
 
     # setting big outliers in data to np.nan
     print('Defining threshold cube for clipping')
-    kappa = 5.0
-    kappa2 = 20.0
+    passtime='('+str(round(time.time()-starttime,3))+'s)' 
+    print('... '+passtime)
     # median of data to find out how far outliers are
     datmedian = np.nanmedian(datalist,axis=0)
     # get corrected sigma at each voxel
@@ -69,6 +137,8 @@ def main():
     thresh = kappa2 * stdmedian
 
     print('kappa-sigma clipping')
+    passtime='('+str(round(time.time()-starttime,3))+'s)' 
+    print('... '+passtime)
     cliplist = []
     statcliplist = []
     whtcliplist = []
@@ -76,7 +146,7 @@ def main():
     for i in range(len(datalist)):
         clip = np.zeros(datalist[i].shape,dtype=np.float32)
         # mask criterion
-        mask1 = (datalist[i] < datmedian + (kappa*stdlist[i])) & (datalist[i] > datmedian - (kappa*stdlist[i]))
+        mask1 = (datalist[i] < datmedian + (kappa1*stdlist[i])) & (datalist[i] > datmedian - (kappa1*stdlist[i]))
         mask2 = (datalist[i] < datmedian + thresh) & (datalist[i] > datmedian - thresh)
         critmask = mask1 & mask2
         # mask data
@@ -99,6 +169,8 @@ def main():
     # make weighted average of the data and of stat
     # division by zero gets assigned a nan
     print('combining cubes')
+    passtime='('+str(round(time.time()-starttime,3))+'s)' 
+    print('... '+passtime)
     # new weight cubes
     weigh_comb = np.sum(whtcliplist,axis=0)
     stat_weigh = np.square(weigh_comb)
@@ -127,6 +199,8 @@ def main():
     t = Table([datafiles,vox_num,numclip,per], names=('FIELD_NAME','TOTAL_VOXELS','CLIPPED_VOXELS','PERCENTAGE_CLIPPED'))
 
     print('writing')
+    passtime='('+str(round(time.time()-starttime,3))+'s)' 
+    print('... '+passtime)
     data_comb = np.float32(data_comb)
     stat_comb = np.float32(stat_comb)
     weigh_comb = np.uint8(weigh_comb)
@@ -134,10 +208,11 @@ def main():
     scombhdu = fits.PrimaryHDU(data=stat_comb)
     wcombhdu = fits.PrimaryHDU(data=weigh_comb)
     
-    dcombhdu.writeto('data_sfc_M0416-SF2_comb_%s.fits' % se,overwrite=True)
-    scombhdu.writeto('stat_sfc_M0416-SF2_comb_%s.fits' % se,overwrite=True)
-    wcombhdu.writeto('wht_sfc_M0416-SF2_comb_%s.fits' % se,overwrite=True)
-    t.write('clip_sfc_M0416-SF2_comb_%s.fits' % se,overwrite=True)
+    dcombhdu.writeto('data_%s_comb_%s.fits' % (name,se),overwrite=True)
+    scombhdu.writeto('stat_%s_comb_%s.fits' % (name,se),overwrite=True)
+    wcombhdu.writeto('wht_%s_comb_%s.fits' % (name,se),overwrite=True)
+    t.write('clip_%s_comb_%s.fits' % (name,se),overwrite=True)
 
-if __name__ == '__main__':
-  main()
+passtime='('+str(round(time.time()-starttime,3))+'s)'
+print('Done. '+passtime)
+

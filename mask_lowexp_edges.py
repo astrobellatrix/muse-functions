@@ -21,7 +21,7 @@ formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-i","--input",
                     required=True,
                     type=str,
-                    help="Base name of cube that is modified. Example: 'DATACUBE_SF_M0416-SF2_03.fits', then the base name is 'SF_M0416-SF_03.fits'. It is expected that the datacube is zero-indexed and has flux in the first extension, the variance in the second extension and the whitelight image in the third extension (the default of the pipeline).")
+                    help="Base name of cube that is modified. Example: 'DATACUBE_SF_M0416-SF2_03.fits', then the base name is 'SF_M0416-SF_03'. It is expected that the datacube is zero-indexed and has flux in the first extension, the variance in the second extension and the whitelight image in the third extension (the default of the pipeline).")
 parser.add_argument("-o","--output",
                     type=str,
                     default=None,
@@ -37,7 +37,9 @@ parser.add_argument("-m","--outmask",
 parser.add_argument("--nnan_wave_thresh",
                     type=int,
                     default=3000,
-                    help="Threshold wavelength layers below which the pixels will get masked, this corresponds to about 83 percent for AO and 81 percent for non-AO data.")
+                    help="""
+                    Threshold wavelength layers below which the pixels will get masked, this corresponds to about 83 percent for AO and 81 percent for non-AO data.
+                    """)
 parser.add_argument("--tmpmask",
                     action='store_true',
                     help="""Save the various intermediate masks with the default as mask[n]_[base_name].fits.
