@@ -6,7 +6,7 @@
 #
 
 import argparse
-import sys,time
+import sys,time,datetime
 import astropy.io.fits as fits
 import numpy as np
 from scipy.ndimage import filters
@@ -73,6 +73,7 @@ muse_hdu = fits.open('DATACUBE_%s.fits' % name)
 mdata = muse_hdu[1].data
 sdata = muse_hdu[2].data
 wdata = muse_hdu[3].data
+head = muse_hdu[0].header
 mask = np.ones(wdata.shape,dtype=bool)
 newdata = np.zeros(mdata.shape,dtype=np.float32)
 newstat = np.zeros(sdata.shape,dtype=np.float32)
@@ -144,7 +145,11 @@ imwhite[mask] = np.nan
 newwhite =  imwhite
 
 # write out the masked data
-prihdu = fits.PrimaryHDU(header=muse_hdu[0].header)
+head['history'] = 'This file underwent masking of low exposure edge voxels.'
+now = datetime.datetime.now()
+head['history'] = '%s' % now
+head['history'] = 'See corresponding muse-functions and edgemask.'
+prihdu = fits.PrimaryHDU(header=head)
 datan = fits.ImageHDU(data=newdata,header=muse_hdu[1].header)
 statn = fits.ImageHDU(data=newstat,header=muse_hdu[2].header)
 whiten = fits.ImageHDU(data=newwhite,header=muse_hdu[3].header)
