@@ -63,6 +63,10 @@ parser.add_argument("--poly2",
                     type=float,
                     default=2.24603677e-10,
                     help="2nd order of polynomial if statmethod='poly'.")
+parser.add_argument("--dc_window_size",
+                    type=int,
+                    default=301,
+                    help="Size of the median filter window for the DC-subtraction.")
 
 args = parser.parse_args()
 in_datacube = args.input
@@ -76,6 +80,7 @@ statmethod = args.statmethod
 poly0 = args.poly0
 poly1 = args.poly1
 poly2 = args.poly2
+dc_window_size = args.dc_window_size
 
 if (statmethod == 'fits'):
     in_rancubestattab = 'rancubestat.fits'
