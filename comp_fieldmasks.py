@@ -31,19 +31,27 @@ parser.add_argument("-o","--output",
 parser.add_argument("-S","--SHDU",
                     type=int,
                     default=1,
-                    help="HDU number (0-indexed) or name in the input FITS file containing the flux data.")
+                    help="HDU number (0-indexed) in the input FITS file containing the flux data.")
 parser.add_argument("-N","--NHDU",
                     type=int,
                     default=2,
-                    help="HDU number (0-indexed) or name in the input FITS file containing the variance data.")
+                    help="HDU number (0-indexed) in the input FITS file containing the variance data.")
 parser.add_argument("-E","--EHDU",
                     type=int,
                     default=3,
-                    help="HDU number (0-indexed) or name in the exposure or input FITS file containing the exposure cube.")
+                    help="HDU number (0-indexed) in the exposure or input FITS file containing the exposure cube.")
+parser.add_argument("-W","--WHDU",
+                    type=int,
+                    default=4,
+                    help="HDU number (0-indexed) in the input FITS file containing the whitelight image.")
 parser.add_argument("--expcube",
                     type=str,
                     default='None',
                     help="Name of the exposure FITS datacube. The default is that it is contained in the input datacube as extension 3.")
+parser.add_argument("--whiteima",
+                    type=str,
+                    default='None',
+                    help="Name of the whitelight FITS image. The default is that it is contained in the input datacube as extension 4.")
 parser.add_argument("--medexpfrac",
                     type=float,
                     default=0.4,
@@ -60,19 +68,39 @@ parser.add_argument("--kappa_blanksky",
                     type=float,
                     default=3.0,
                     help="Kappa-sigma clipping threshold for blank sky mask.")
+parser.add_argument("--tmpmasks",
+                    action='store_true',
+                    help="""Save three intermediate masks, (i) a FoV mask (fov_[base_name].fits), (ii) the broadband image (bb_ima_[base_name].fits) and (iii) the initial field mask before erosion and dilation (fmask_[base_name].fits).
+                    """)
+parser.add_argument("--base_name",
+                    type=str,
+                    default=None,
+                    help="""Base name for the various temporary masks. The default expects the input cube to have the name 'DATACUBE_[base_name]_v2.0.fits'
+                    """)
+
 
 args = parser.parse_args()
 in_datacube = args.input
-exp_in_input = args.expcube
 
-if (exp_in_input == 'None'):
-  in_expcube = in_datacube
+if (args.expcube == 'None'):
+    in_expcube = in_datacube
 else:
-  in_expcube = exp_in_input
+    in_expcube = args.expcube
+
+if (args.whiteima == 'None'):
+    in_white = in_datacube
+else:
+    in_white = args.whiteima
+
+if args.base_name == None:
+    base_name = in_datacube[9:-10]
+else:
+    base_name = args.base_name
 
 ihdu_d = args.SHDU
 ihdu_v = args.NHDU
 ihdu_e = args.EHDU
+ihdu_w = args.WHDU
 outputname = args.output
 
 medexpfrac = args.medexpfrac
@@ -80,12 +108,18 @@ bbl1 = args.bbl1
 bbl2 = args.bbl2
 kappa_blanksky = args.kappa_blanksky
 
+save_tmp = args.tmpmasks
+
 # Open cube HDUs
 cubeHDU = fits.open(in_datacube)
 dhead = cubeHDU[ihdu_d].header
 npix = ( dhead['naxis1'], dhead['naxis2'], dhead['naxis3'] )
+
 ecubeHDU = fits.open(in_expcube)
 e_cube = ecubeHDU[ihdu_e].data
+
+wimaHDU = fits.open(in_white)
+whead = wimaHDU[ihdu_w].header
 
 # Create mean exposure image as average through all layers
 exp_ima = np.nanmean(e_cube, axis=0)
@@ -99,7 +133,9 @@ print("Opening cubes. Creating Field-of-View mask image")
 medianexp = np.nanmedian(exp_ima[exp_ima > 0.])
 threshold = medianexp * medexpfrac
 fmask_fov = (exp_ima > threshold).astype(np.int16)
-
+if save_tmp:
+    fits.writeto('fov_%s.fits' % base_name,data=fmask_fov,header=whead,overwrite=True)
+  
 print("Creating a broad-band image of the cube (not full white-light)")
 # Compute a broad-band image of the cube (rather than full white-light), 
 # with zero-order background correction
@@ -110,6 +146,8 @@ del d_cube
 bb_ima[fmask_fov < 1] = np.NaN
 bgrcor = np.nanmedian(bb_ima)
 bb_ima = bb_ima - bgrcor
+if save_tmp:
+    fits.writeto('bb_ima_%s.fits' % base_name,data=bb_ima,header=whead,overwrite=True)
 
 print("Masking all pixels above (kappa * bgrnoise)")
 # Mask all pixels in broadband image above threshold = kappa * bgrnoise, 
@@ -124,6 +162,8 @@ corrfac = 1.7
 sigbb = m.sqrt(np.nanmean(vmed_vec)/npix[2]) * corrfac      
 threshold = kappa_blanksky * sigbb
 tmpmask = (np.logical_and(bb_ima<threshold,fmask_fov>0)).astype(float)
+if save_tmp:
+    fits.writeto('fmask_%s.fits' % base_name,data=tmpmask,header=whead,overwrite=True)
 
 print("Creating the final blank-sky mask with erosion and dilation operations.")
 # Create mask of "blank sky" pixels (1 = blank sky within FoV, 
@@ -138,11 +178,12 @@ np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<8.5, 0.)
 for i in range(0,5):
     np.place(tmpmask, filters.uniform_filter(tmpmask, size=3)*9<6.5, 0.)    
 fmask_blanksky = tmpmask.astype(np.int16) 
-fmask_blanksky_zap = np.where((fmask_blanksky==0)|(fmask_blanksky==1), fmask_blanksky^1, fmask_blanksky)
+# ZAP wants exactly the inverse kind of mask, so I could program it here, but decided against it
+#fmask_blanksky_zap = np.where((fmask_blanksky==0)|(fmask_blanksky==1), fmask_blanksky^1, fmask_blanksky)
 
 print("Writing...")
 fits.writeto(outputname, data=fmask_blanksky, header=cubeHDU[ihdu_d].header, overwrite=True)
-fits.writeto(outputname[:-5] + '.zap.fits', data=fmask_blanksky_zap, header=cubeHDU[ihdu_d].header, overwrite=True)
+#fits.writeto(outputname[:-5] + '.zap.fits', data=fmask_blanksky_zap, header=cubeHDU[ihdu_d].header, overwrite=True)
 del fmask_blanksky
     
 print("Done.")

@@ -109,14 +109,19 @@ wlen = npix[2]
 # wavelength
 wave = np.zeros(wlen,dtype=np.float32)
 # mean of unmasked data, no continuum subtraction
-meandata = np.zeros(wlen,dtype=np.float32)  
+meandata = np.zeros(wlen,dtype=np.float32) 
+# median of unmasked data, no continuum subtraction
+mediandata = np.zeros(wlen,dtype=np.float32)
 # standard deviation of unmasked data 
 sdevdata = np.zeros(wlen,dtype=np.float32) 
 # robust estimate of standard deviation from quartile distance in unmasked data
 qdsigdata = np.zeros(wlen,dtype=np.float32)
 # mean of unmasked data after subtraction of spectrally median filtered 
 # cube (MFS)
-meanmfs = np.zeros(wlen,dtype=np.float32)   
+meanmfs = np.zeros(wlen,dtype=np.float32)  
+# median of unmasked data after subtraction of spectrally median filtered 
+# cube (MFS)
+medianmfs = np.zeros(wlen,dtype=np.float32) 
 # standard deviation of unmasked MFS data 
 sdevmfs = np.zeros(wlen,dtype=np.float32) 
 # robust estimate of standard deviation from quartile distance in 
@@ -135,6 +140,7 @@ for l in range(0,npix[2]):
     data_masked = ma.masked_where(1-bs_mask, datalayer)
     pvar_masked = ma.masked_where(1-bs_mask, pvarlayer)
     mfs_masked = ma.masked_where(1-bs_mask, mfslayer)
+    mediandata[l] = np.nanmedian(ma.compressed(data_masked))   
     meandata[l] = np.nanmean(ma.compressed(data_masked))
     sdevdata[l] = np.nanstd(ma.compressed(data_masked))
     q25 = np.nanpercentile(ma.compressed(data_masked),25.)
@@ -142,6 +148,7 @@ for l in range(0,npix[2]):
     # 0.7413 = ratio between standard deviation and quartile distance 
     # for a normal distribution 
     qdsigdata[l] = 0.7413 * (q75 - q25)     
+    medianmfs[l] = np.nanmedian(ma.compressed(mfs_masked))
     meanmfs[l] = np.nanmean(ma.compressed(mfs_masked))
     sdevmfs[l] = np.nanstd(ma.compressed(mfs_masked))
     q25 = np.nanpercentile(ma.compressed(mfs_masked),25.)
@@ -150,35 +157,52 @@ for l in range(0,npix[2]):
     medpvar[l] = np.nanmedian(ma.compressed(pvar_masked))
 meandata[np.isnan(meandata)] = 0
 meanmfs[np.isnan(meanmfs)] = 0
-#print(meanmfs[-13:])
+mediandata[np.isnan(mediandata)] = 0
+medianmfs[np.isnan(medianmfs)] = 0
+
+#  Below are ad-hoc modifications for AO, which we need to properly implement for MUSCATEL.
+#  Let's postpone this to later. (but we should not forget them!) 
+#    in1, in2 = 850, 1050
+#    md_in1 = np.median(meandata[in1-25:in1])
+#    md_in2 = np.median(meandata[in2:in2+25])
+#    inc = (md_in2-md_in1)/(in2 - in1)
+#    meandata[in1:in2] = md_in1 + inc * np.arange(in2-in1)
+#    mm_in1 = np.median(meanmfs[in1-25:in1])
+#    mm_in2 = np.median(meanmfs[in2:in2+25])
+#    inc = (mm_in2-mm_in1)/(in2 - in1)
+#    meanmfs[in1:in2] = mm_in1 + inc * np.arange(in2-in1)
 
 print("Calculating DC background correction")
 # Calculate DC background correction for original datacube 
 # step 1: Produce a spectrally smoothed version of the mean values per layer 
-medfil_fulwid = 101
+medfil_fulwid = dc_window_size
 gaufil_sigma = 20.
-meandata_mf = filters.median_filter(meandata, size=medfil_fulwid, mode='nearest')
-meandata_gmf = filters.gaussian_filter1d(meandata_mf, sigma=gaufil_sigma, mode='nearest')
+mediandata_mf = filters.median_filter(mediandata, size=medfil_fulwid, mode='nearest')
+mediandata_gmf = filters.gaussian_filter1d(mediandata_mf, sigma=gaufil_sigma, mode='nearest')
 # step 2: Per default we use this smoothed version for the DC correction
-dc_cor = meandata_gmf
+dc_cor = mediandata_gmf
 # step 3: If the difference between layer mean and the smoothed version 
 # deviates significantly from random then use the mean of that layer for 
 # the DC correction
+# NOTE: Jan 12 2022 - This step has been discontinued temporarily, since the 
+# newest ZAP version doesn't overcorrect the sky lines as much anymore, 
+# but I need to test this still (Tanya Urrutia)
 # expected standard error of the mean = sdev within each 
 # layer / sqrt(number of pixels)
-sigmean = qdsigdata/m.sqrt(np_unmasked)
+#sigmean = qdsigdata/m.sqrt(np_unmasked)
 # ad-hoc value for kappa-sigma clipping
-kappa = 4. 
+#kappa = 4. 
 # replace default DC correction values when indicated 
-np.copyto(dc_cor, meandata, where=np.fabs(meandata-meandata_gmf) > kappa*sigmean ) 
+#np.copyto(dc_cor, meandata, where=np.fabs(meandata-meandata_gmf) > kappa*sigmean ) 
 
+# No DC background correction anymore!!!
 # Calculate DC background correction for MFS cube (same process as above)
-meanmfs_mf = filters.median_filter(meanmfs, size=medfil_fulwid, mode='nearest')
-meanmfs_gmf = filters.gaussian_filter1d(meanmfs_mf, sigma=gaufil_sigma, mode='nearest')
-mdc_cor = meanmfs_gmf    
+#meanmfs_mf = filters.median_filter(meanmfs, size=medfil_fulwid, mode='nearest')
+#meannmfs_gmf = filters.gaussian_filter1d(meanmfs_mf, sigma=gaufil_sigma, mode='nearest')
+mdc_cor = np.zeros(wlen,dtype=np.float32)
 # standard deviations of the layer means in MFS cube               
-sigmeanmfs = qdsigmfs/m.sqrt(np_unmasked)
-np.copyto(mdc_cor, meanmfs, where=np.fabs(meanmfs-meanmfs_gmf) > kappa*sigmeanmfs )
+#sigmeanmfs = qdsigmfs/m.sqrt(np_unmasked)
+#np.copyto(mdc_cor, meanmfs, where=np.fabs(meanmfs-meanmfs_gmf) > kappa*sigmeanmfs )
 
 print("Calculating effective noise from MFS cube statistics...")
 # Calculate effective noise from statistics of MFS cube
@@ -215,8 +239,8 @@ if (statmethod == 'poly'):
 
 
 # Write output table
-outtab = Table( [ wave, meandata, sdevdata, qdsigdata, meanmfs, sdevmfs, qdsigmfs, medpvar, dc_cor, mdc_cor, ratio_qdsig_pvar, effsigmfs ],
-    names=('wave', 'meandata', 'sdevdata', 'qdsigdata', 'meanmfs', 'sdevmfs', 'qdsigmfs', 'medpvar', 'dc_cor', 'mdc_cor', 'r', 'effsig') )
+outtab = Table( [ wave, meandata, mediandata, sdevdata, qdsigdata, meanmfs, medianmfs, sdevmfs, qdsigmfs, medpvar, dc_cor, mdc_cor, ratio_qdsig_pvar, effsigmfs ],
+    names=('wave', 'meandata', 'mediandata', 'sdevdata', 'qdsigdata', 'meanmfs', 'medianmfs', 'sdevmfs', 'qdsigmfs', 'medpvar', 'dc_cor', 'mdc_cor', 'r', 'effsig') )
 outtab.write(outputname, overwrite=True)
 
 print("Done.")
