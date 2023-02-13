@@ -29,13 +29,13 @@ parser.add_argument("-i","--input",
                     """)
 parser.add_argument("--kappa1",
                     type=float,
-                    default=5.0,
+                    default=6.0,
                     help="""
                     First kappa threshold for kappa-sigma clipping based on individual variances.
                     """)
 parser.add_argument("--kappa2",
                     type=float,
-                    default=2.0,
+                    default=20.0,
                     help="""
                     Second kappa threshold for kappa-sigma clipping based on the median of all variances.
                     """)
